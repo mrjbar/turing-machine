@@ -2,46 +2,27 @@ import java.util.*;
 
 public class TuringMachine {
 	
-	private ArrayList<ArrayList> tapeDeck;
-	private ArrayList<String> tape = new ArrayList<String>();
-	private Map<String,String> program = new HashMap<String,String>();
-	private Set<String> finalStates = new HashSet<String>(); // run halts when state is a member
-	private String state; // the current state
-	private int[] indices; // the current position of the R/W head
-	private int index = 0; // the current position of the R/W head
-	private String errorState;
+	private ArrayList<Tape> tapeDeck;
+	private Tape tape;
+	private Map<Trigger,Action> program = new HashMap<Trigger,Action>();
+	private Set<Integer> finalStates = new HashSet<Integer>(); // run halts when state is a member
+	private int state; // the current state
+	private int errorState;
 	
-	public TuringMachine()
+	public TuringMachine(String defaultTape)
 	{
-		indices = new int[1];
-		tapeDeck = new ArrayList<ArrayList>();
+		tapeDeck = new ArrayList<Tape>();
+		tape = new Tape(defaultTape);
 		tapeDeck.add(tape);
 	}
 	
-	public TuringMachine(int numOfTapes)
+	public TuringMachine(String defaultTape, int extraTapes)
 	{
-		int size = 100;
-		indices = new int[numOfTapes + 1];
-		tapeDeck = new ArrayList<ArrayList>();
+		tapeDeck = new ArrayList<Tape>();
+		tape = new Tape(defaultTape);
 		tapeDeck.add(tape);
-		for(int i=0; i<numOfTapes; i++)
-		{
-			ArrayList<String> auxiliaryTape = new ArrayList<String>();
-			for(int j=0; j<size; j++) auxiliaryTape.add("0");
-			tapeDeck.add(auxiliaryTape);
-		}
-	}
-
-	/**
-	 * Add a transition to the transition table(HashMap) of the finite state machine
-	 * @param t - tape
-	 */
-	public void addTape(String t)
-	{
-		for(int i=0; i<t.length(); i++)
-		{
-			tape.add(String.format("%s",t.charAt(i)));
-		}
+		for(int i=0; i<extraTapes; i++)
+			tapeDeck.add(new Tape("0000"));
 	}
 	
 	/**
@@ -50,18 +31,37 @@ public class TuringMachine {
 	 * @param state - current state
 	 * @param newState - new state
 	 */
-	public void addProgram(int current_tape, char current_state, char current_bit, int new_tape, char new_state, char new_bit, int direction)
+	public void addInstruction(int current_state, String current_bits, int new_state, String new_bits, String directions)
 	{
-		String cs = String.format("%s%s%s", current_tape, current_state, current_bit);
-		String ns = String.format("%s%s%s%s", new_tape, new_state, new_bit, direction);
-		program.put(cs, ns);
+		String[] currentBits;
+		String[] newBits;
+		String[] direction;
+		
+		Trigger currentState = new Trigger();
+		currentState.state = current_state;
+		
+		Action newState = new Action();
+		newState.state = new_state;
+		
+		currentBits = current_bits.split(",");
+		newBits = new_bits.split(",");
+		direction = directions.split(",");
+
+		for(int i=0; i<currentBits.length; i++)
+		{
+			currentState.bit.add(currentBits[i].charAt(0));
+			newState.bit.add(newBits[i].charAt(0));
+			newState.direction.add(Integer.parseInt(direction[i]));
+		}
+		
+		program.put(currentState, newState);
 	}
 	
    /**
 	 * Add one or more final states to the finite state machine
 	 * @param finalState
 	 */
-	public void addFinalState(String finalState)
+	public void addFinalState(int finalState)
 	{
 		finalStates.add(finalState);
 	}
@@ -70,72 +70,80 @@ public class TuringMachine {
 	 * Add one or more final states to the finite state machine
 	 * @param finalState
 	 */
-	public void addErrorState(String errorState)
+	public void addErrorState(int errorState)
 	{
 		this.errorState = errorState;
 	}
 		
    public void run() 
    {
-	// Set the current state the startState
-	   		int direction;
-			state = "0";
-			String currentBit;
-			String newState = "";
-			String cs = "";
-			boolean done = false;
-			int tapeIndex = 0;
-			ArrayList<String> currentTape = tapeDeck.get(tapeIndex);
+	   		// Set start state
+			state = 0;
 			
+			// Set start bit
+			ArrayList<Character> currentBits = new ArrayList<Character>();
+			
+			// Iterate through each tape in the tapeDeck
+			// Add the first bit in each tape into currentBits
+			for(Tape t : tapeDeck) {
+				currentBits.add(t.read());
+			}
+			
+			// Create a Trigger with the starting state
+			// and the current bits
+			Trigger cs = new Trigger();
+			cs.state = state;
+			cs.bit = currentBits;
+
+			// Setup directions
+			ArrayList<Integer> directions = new ArrayList<Integer>();
+			Action ns = new Action();
+			
+			boolean done = false;
 			// Iterate through the tokens
 			while(!done)
 			{
-				String result = String.format("tape = %s, state = %s, index = %s, tape = %s", tapeIndex, state, indices[0], tape);
+				String result = String.format("state = %s, %s", state, tape);
 				System.out.println(result);
 				
-				if(state.equals(errorState)) { 	
+				if(state == errorState) { 	
 					System.out.println("Error");
 					return;
 				}
 				
-				if(indices[tapeIndex] < 0 || indices[tapeIndex] > currentTape.size()) {
-					System.out.println("Halted");
-					return;
+				// Look up the current state in the program HashMap
+				// Retrieve the new state from the HashMap
+				ns = program.get(cs);
+				
+				// UPDATE THE  STATE OF THE TURING MACHINE
+
+				// Update the current state
+				state = ns.state;
+				
+				// Update the current set of bits
+				currentBits = ns.bit;
+				
+				directions = ns.direction;
+				
+				// Update state
+				cs.state = state;
+				
+				// UPDATE THE TAPES 
+				for(int i=0; i<tapeDeck.size(); i++)
+				{
+					Tape currentTape = tapeDeck.get(i);
+					currentTape.write(currentBits.get(i));
+					currentTape.moveHead(directions.get(i));
+					cs.bit.set(i, currentTape.read());
 				}
 				
-				currentBit = currentTape.get(indices[tapeIndex]);
-				cs = String.format("%s%s%s", tapeIndex, state, currentBit);
-				
-				// Get new states
-				newState = program.get(cs);
-				
-				// Get new tape index
-				tapeIndex = Integer.parseInt(newState.substring(0,1));
-				
-				// Get new state
-				state = newState.substring(1,2);
-				
-				// Get new bit
-				currentBit = newState.substring(2, 3);
-				
-				// Get new direction
-				// Fix this later
-				direction = Character.getNumericValue(newState.charAt(3));
-				
-				// Change tape
-				currentTape = tapeDeck.get(tapeIndex);
-				
-				// Change the the value on the tape at the specified index
-				currentTape.set(indices[tapeIndex], currentBit);
-				indices[tapeIndex] = indices[tapeIndex] + direction;
-				
-				for(String finalState: finalStates)
+				for(Integer finalState: finalStates)
 				{
-					if(state.equals(finalState))
+					if(state == finalState)
 					{
-						result = String.format("tape = %s, state = %s, index = %s, tape = %s", tapeIndex, state, index, tape);
+						result = String.format("state = %s, %s", state, tape);
 						System.out.println(result);
-						System.out.println("Halted");
+						System.out.println("Halted\n");
 						done = true;
 					}
 				}
